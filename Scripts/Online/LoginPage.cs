@@ -3,6 +3,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Firebase;
 using Firebase.Auth;
+using System.Threading.Tasks;
 
 public class LoginPage : MonoBehaviour
 {
@@ -15,6 +16,10 @@ public class LoginPage : MonoBehaviour
     public static string userId = "";
 
     private FirebaseAuth auth;
+
+
+    private bool allowLoginIfHasUser = false; //Если true, то после регистрации пользователю не надобудет потом заново входить.
+    private int errorSuffixLenght = 28; //Длина начала ошибки которую мы хотим убрать чтобы output был покрасивее 
 
     void Start()
     {
@@ -30,35 +35,67 @@ public class LoginPage : MonoBehaviour
 
     private void login()
     {
+        var taskScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+
         var email = emailField.text;
         var password = passwordField.text;
 
-        auth.SignInWithEmailAndPasswordAsync(email, password);
+        auth.SignInWithEmailAndPasswordAsync(email, password).ContinueWith(task => {
+            if (task.IsFaulted)
+            {
+                errorText.text = task.Exception.GetBaseException().ToString().Remove(0, errorSuffixLenght);
+                return;
+            }
+
+            if (task.IsCompleted)
+            {
+                GoToGame();
+                return;
+            }
+        }, taskScheduler);
     }
 
     private void register()
     {
+        var taskScheduler = TaskScheduler.FromCurrentSynchronizationContext();
+
         var email = emailField.text;
         var password = passwordField.text;
-        auth.CreateUserWithEmailAndPasswordAsync(email, password);
+        auth.CreateUserWithEmailAndPasswordAsync(email, password).ContinueWith(task => {
+            if (task.IsFaulted)
+            {
+                errorText.text = task.Exception.GetBaseException().ToString().Remove(0, errorSuffixLenght);
+                return;
+            }
+
+            if (task.IsCompleted)
+            {
+                GoToGame();
+                return;
+            }
+        }, taskScheduler);
     }
 
     void InitializeFirebase()
     {
         auth = Firebase.Auth.FirebaseAuth.DefaultInstance;
-        auth.SignOut();
-        auth.StateChanged += AuthStateChanged;
-        AuthStateChanged(this, null);
-    }
 
-    void AuthStateChanged(object sender, System.EventArgs eventArgs)
-    {
         if (auth.CurrentUser != null)
         {
-            errorText.text = "logged in as: " + auth.CurrentUser.Email;
-            userId = auth.CurrentUser.UserId;
-            SceneManager.LoadScene("SampleScene");
-        } 
-        else errorText.text = "Make sure password and email are correct";
+            if (allowLoginIfHasUser == false)
+            {
+                auth.SignOut();
+            }
+            else
+            {
+                GoToGame();
+            }
+        }    
+    }
+
+    private void GoToGame()
+    {
+        userId = auth.CurrentUser.UserId;
+        SceneManager.LoadScene("SampleScene");
     }
 }
